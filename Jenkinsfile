@@ -4,7 +4,8 @@ pipeline {
   environment {
     REGISTRY = "localhost:5001"
     IMAGE_PREFIX = "jumptotech"
-    GITOPS_REPO = "https://github.com/Juzonb1r/jumptotech-gitops.git"
+
+    GITOPS_REPO   = "https://github.com/Juzonb1r/jumptotech-gitops.git"
     GITOPS_BRANCH = "main"
   }
 
@@ -32,7 +33,7 @@ pipeline {
 
           def builds = [:]
           for (s in services) {
-            def svc = s
+            def svc = s // important: closure fix
             builds[svc] = {
               sh """
                 set -e
@@ -79,14 +80,19 @@ pipeline {
             sh """
               set -e
               rm -rf gitops
+
+              # clone using token (repo can be public, but push needs auth)
               git clone --branch ${GITOPS_BRANCH} https://x-access-token:${GITHUB_TOKEN}@github.com/Juzonb1r/jumptotech-gitops.git gitops
 
               cd gitops
 
+              # IMPORTANT: set git identity for CI commits
+              git config user.email "jenkins@jumptotech.local"
+              git config user.name "Jenkins CI"
+
               for svc in auth-service courses-service enrollment-service content-service news-service gateway-service; do
                 file="dev/values/\${svc}.yaml"
                 echo "Updating \${file} tag -> ${sha}"
-                # replace tag line
                 sed -i.bak "s/^  tag: .*/  tag: \\"${sha}\\"/g" "\${file}"
                 rm -f "\${file}.bak"
               done
