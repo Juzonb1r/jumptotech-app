@@ -31,11 +31,13 @@ pipeline {
           def builds = [:]
 
           for (s in services) {
-            builds[s] = {
+            def svc = s  // IMPORTANT: fix Groovy parallel closure bug
+            builds[svc] = {
               sh """
-                echo "Building ${s}..."
-                docker build -t ${REGISTRY}/${IMAGE_PREFIX}/${s}:${sha} ./services/${s}
-                docker push ${REGISTRY}/${IMAGE_PREFIX}/${s}:${sha}
+                set -e
+                echo "Building ${svc}..."
+                docker build -t ${REGISTRY}/${IMAGE_PREFIX}/${svc}:${sha} ./services/${svc}
+                docker push ${REGISTRY}/${IMAGE_PREFIX}/${svc}:${sha}
               """
             }
           }
@@ -45,10 +47,10 @@ pipeline {
       }
     }
 
-    stage('Smoke test (optional)') {
+    stage('Verify Registry') {
       steps {
         sh '''
-          echo "Images pushed to local registry:"
+          echo "Catalog:"
           curl -s http://localhost:5000/v2/_catalog || true
         '''
       }
