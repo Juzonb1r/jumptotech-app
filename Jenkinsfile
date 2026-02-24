@@ -2,8 +2,7 @@ pipeline {
   agent any
 
   environment {
-    // IMPORTANT: from inside Jenkins container, use docker-compose service name
-    REGISTRY = "registry:5000"
+    REGISTRY = "localhost:5001"
     IMAGE_PREFIX = "jumptotech"
   }
 
@@ -20,7 +19,6 @@ pipeline {
       steps {
         script {
           def sha = readFile('.gitsha').trim()
-
           def services = [
             "auth-service",
             "courses-service",
@@ -31,9 +29,8 @@ pipeline {
           ]
 
           def builds = [:]
-
           for (s in services) {
-            def svc = s  // fix Groovy closure bug
+            def svc = s
             builds[svc] = {
               sh """
                 set -e
@@ -42,7 +39,6 @@ pipeline {
               """
             }
           }
-
           parallel builds
         }
       }
@@ -52,7 +48,6 @@ pipeline {
       steps {
         script {
           def sha = readFile('.gitsha').trim()
-
           def services = [
             "auth-service",
             "courses-service",
@@ -77,7 +72,7 @@ pipeline {
       steps {
         sh '''
           echo "=== REGISTRY CATALOG ==="
-          curl -s http://registry:5000/v2/_catalog || true
+          curl -s http://localhost:5001/v2/_catalog || true
         '''
       }
     }
