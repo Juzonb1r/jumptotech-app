@@ -4,10 +4,12 @@ pipeline {
   environment {
     REGISTRY = "localhost:5001"
     IMAGE_PREFIX = "jumptotech"
+    GITOPS_REPO = "https://github.com/Juzonb1r/jumptotech-gitops.git"
+    GITOPS_BRANCH = "main"
   }
 
   stages {
-    stage('Checkout') {
+    stage('Checkout app repo') {
       steps {
         checkout scm
         sh 'git rev-parse --short HEAD > .gitsha'
@@ -62,6 +64,37 @@ pipeline {
               set -e
               echo "=== PUSH: ${s} ==="
               docker push ${REGISTRY}/${IMAGE_PREFIX}/${s}:${sha}
+            """
+          }
+        }
+      }
+    }
+
+    stage('Update GitOps repo tags (dev)') {
+      steps {
+        script {
+          def sha = readFile('.gitsha').trim()
+
+          withCredentials([string(credentialsId: 'github-gitops-token', variable: 'GITHUB_TOKEN')]) {
+            sh """
+              set -e
+              rm -rf gitops
+              git clone --branch ${GITOPS_BRANCH} https://x-access-token:${GITHUB_TOKEN}@github.com/Juzonb1r/jumptotech-gitops.git gitops
+
+              cd gitops
+
+              for svc in auth-service courses-service enrollment-service content-service news-service gateway-service; do
+                file="dev/values/\${svc}.yaml"
+                echo "Updating \${file} tag -> ${sha}"
+                # replace tag line
+                sed -i.bak "s/^  tag: .*/  tag: \\"${sha}\\"/g" "\${file}"
+                rm -f "\${file}.bak"
+              done
+
+              git status
+              git add dev/values/*.yaml
+              git commit -m "dev: bump images to ${sha}" || echo "No changes to commit"
+              git push origin ${GITOPS_BRANCH}
             """
           }
         }
