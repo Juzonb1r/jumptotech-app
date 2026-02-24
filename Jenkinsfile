@@ -2,7 +2,8 @@ pipeline {
   agent any
 
   environment {
-    REGISTRY = "localhost:5000"
+    // IMPORTANT: from inside Jenkins container, use docker-compose service name
+    REGISTRY = "registry:5000"
     IMAGE_PREFIX = "jumptotech"
   }
 
@@ -11,10 +12,11 @@ pipeline {
       steps {
         checkout scm
         sh 'git rev-parse --short HEAD > .gitsha'
+        sh 'echo "GIT SHA: $(cat .gitsha)"'
       }
     }
 
-    stage('Build & Push (local registry)') {
+    stage('Build images (parallel)') {
       steps {
         script {
           def sha = readFile('.gitsha').trim()
@@ -31,13 +33,12 @@ pipeline {
           def builds = [:]
 
           for (s in services) {
-            def svc = s  // IMPORTANT: fix Groovy parallel closure bug
+            def svc = s  // fix Groovy closure bug
             builds[svc] = {
               sh """
                 set -e
-                echo "Building ${svc}..."
+                echo "=== BUILD: ${svc} ==="
                 docker build -t ${REGISTRY}/${IMAGE_PREFIX}/${svc}:${sha} ./services/${svc}
-                docker push ${REGISTRY}/${IMAGE_PREFIX}/${svc}:${sha}
               """
             }
           }
@@ -47,11 +48,36 @@ pipeline {
       }
     }
 
+    stage('Push images (sequential)') {
+      steps {
+        script {
+          def sha = readFile('.gitsha').trim()
+
+          def services = [
+            "auth-service",
+            "courses-service",
+            "enrollment-service",
+            "content-service",
+            "news-service",
+            "gateway-service"
+          ]
+
+          for (s in services) {
+            sh """
+              set -e
+              echo "=== PUSH: ${s} ==="
+              docker push ${REGISTRY}/${IMAGE_PREFIX}/${s}:${sha}
+            """
+          }
+        }
+      }
+    }
+
     stage('Verify Registry') {
       steps {
         sh '''
-          echo "Catalog:"
-          curl -s http://localhost:5000/v2/_catalog || true
+          echo "=== REGISTRY CATALOG ==="
+          curl -s http://registry:5000/v2/_catalog || true
         '''
       }
     }
